@@ -8,6 +8,15 @@ terraform {
   }
 }
 
+terraform {
+  backend "s3" {
+    # TODO: Replace this with the exact bucket name you created in AWS S3
+    bucket = "g360-tf-state"
+    key    = "g360/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
 provider "aws" {
   region = "us-east-1"
 }
