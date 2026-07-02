@@ -59,7 +59,9 @@ module "eks" {
 
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
-
+  create_cloudwatch_log_group = false
+  create_kms_key              = false
+  cluster_encryption_config   = {}
   eks_managed_node_groups = {
     
     # Node Group 1: The AI Worker (Strictly 1 node)
