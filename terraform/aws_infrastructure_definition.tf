@@ -58,7 +58,7 @@ module "eks" {
       min_size     = 1
       max_size     = 1
       desired_size = 1
-      instance_types = ["t3.large"] # 2 vCPU, 8GB RAM (Costs ~$0.025/hr on SPOT)
+      instance_types = ["m7i-flex] # 2 vCPU, 8GB RAM (Costs ~$0.025/hr on SPOT)
       capacity_type  = "SPOT"
       
       # We label this node so we can force Ollama to run here
