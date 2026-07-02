@@ -1,0 +1,4 @@
+# This is the file the AI will patch
+replicaCount: 2
+image: nginx:latest
+memoryLimit: "256Mi"  # We will change this to "1Mi" during the demo to cause a crash

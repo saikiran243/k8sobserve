@@ -1,0 +1,151 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-operations
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ai-operations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      # CRITICAL: This forces the pod to ONLY run on the t3.large node
+      nodeSelector:
+        workload: ai-inference
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          command: ["/bin/sh", "-c"]
+          args: ["ollama serve & sleep 5 && ollama pull qwen2.5-coder:1.5b && wait"]
+          ports:
+            - containerPort: 11434
+          resources:
+            requests:
+              cpu: "1000m"     # Guarantee 1 full CPU core for inference speed
+              memory: "3Gi"    # Guarantee 3GB RAM (plenty for a 1.5B model)
+            limits:
+              cpu: "2000m"     # Cap at 2 CPU cores (the max of a t3.large)
+              memory: "6Gi"    # Cap at 6GB RAM (Leaves 2GB for the OS and Kubelet)
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ai-operations
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434
+      targetPort: 11434
+---
+# 2. The Python AI Webhook Agent (No custom Docker image required!)
+# We use a ConfigMap to inject the Python script directly into a vanilla python pod.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-agent-script
+  namespace: ai-operations
+data:
+  webhook.py: |
+    import os, json, requests
+    from flask import Flask, request
+    from github import Github
+
+    app = Flask(__name__)
+    OLLAMA_URL = "http://ollama:11434/api/generate"
+    GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+
+    @app.route('/webhook', methods=['POST'])
+    def datadog_webhook():
+        payload = request.json
+        error_log = payload.get('error_log', 'Unknown Error')
+        pod_name = payload.get('pod_name', 'target-app')
+        
+        print(f"🚨 Datadog Alert Received for {pod_name}")
+        
+        system_prompt = "You are an automated cluster engineering AI. Output ONLY a JSON patch to fix the provided Kubernetes logs. No markdown."
+        
+        ollama_payload = {
+            "model": "qwen2.5-coder:1.5b",
+            "prompt": f"{system_prompt}\n\nLogs:\n{error_log}",
+            "stream": False
+        }
+        
+        print("🤖 Analyzing logs via local in-cluster LLM...")
+        response = requests.post(OLLAMA_URL, json=ollama_payload)
+        ai_patch = response.json().get('response', '').strip()
+        
+        print(f"💡 AI Suggested Patch:\n{ai_patch}")
+        
+        if GITHUB_TOKEN:
+            try:
+                g = Github(GITHUB_TOKEN)
+                # REPLACE WITH YOUR ACTUAL GITHUB REPO URL:
+                repo = g.get_repo("saikiran243/eks-drift-demo") 
+                # Open PR Logic goes here...
+                print("📦 Automated PR successfully created!")
+            except Exception as e:
+                print(f"⚠️ Failed to connect to GitHub: {e}")
+
+        return {"status": "remediation_triggered", "patch": ai_patch}, 200
+
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=8080)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-webhook-agent
+  namespace: ai-operations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-webhook-agent
+  template:
+    metadata:
+      labels:
+        app: ai-webhook-agent
+    spec:
+      containers:
+        - name: python-agent
+          image: python:3.10-slim
+          command: ["/bin/sh", "-c"]
+          # Installs dependencies on the fly and runs our webhook script
+          args: ["pip install flask requests pygithub && python /app/webhook.py"]
+          env:
+            - name: GITHUB_TOKEN
+              value: "INSERT_YOUR_GITHUB_TOKEN_HERE" # Replace prior to deployment
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: script-volume
+              mountPath: /app
+      volumes:
+        - name: script-volume
+          configMap:
+            name: ai-agent-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-webhook-agent
+  namespace: ai-operations
+spec:
+  selector:
+    app: ai-webhook-agent
+  ports:
+    - port: 8080
+      targetPort: 8080

@@ -1,0 +1,31 @@
+name: Enterprise Teardown (Destroy Infrastructure)
+
+on:
+  workflow_dispatch: # Allows manual trigger from the GitHub UI
+
+permissions:
+  id-token: write # Required for OIDC AWS Auth
+  contents: read
+
+jobs:
+  destroy-infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::293472517815:role/GitHubActionsG360Role
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init & Destroy
+        run: |
+          cd terraform
+          terraform init
+          # Auto-approves the destruction of all resources defined in main.tf
+          terraform destroy -auto-approve

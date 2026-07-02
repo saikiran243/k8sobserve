@@ -1,0 +1,59 @@
+name: Enterprise OIDC Infrastructure Provisioning
+
+on:
+  workflow_dispatch: # Allows manual trigger from the GitHub UI
+
+permissions:
+  id-token: write 
+  contents: read
+  pull-requests: write
+
+
+env:
+  AWS_REGION: "us-east-1"
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubActionsG360Role
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init & Apply
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Connect to EKS
+        run: aws eks update-kubeconfig --region us-east-1 --name enterprise-gitops-demo
+
+      - name: Deploy Datadog Agent
+        run: |
+          helm repo add datadog https://helm.datadoghq.com
+          helm upgrade --install datadog-agent datadog/datadog \
+            --set datadog.apiKey=${{ secrets.DATADOG_API_KEY }} \
+            --set clusterAgent.enabled=true \
+            --set datadog.logs.enabled=true \
+            --set datadog.logs.containerCollectAll=true
+
+      - name: Deploy ArgoCD GitOps Engine
+        run: |
+          kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+      - name: Deploy AI Remediation Engine (Injecting GitHub Token)
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_GITHUB_TOKEN }}
+        run: |
+          # Safely injects the token into the Kubernetes Secret on the fly
+          envsubst < k8s/ai_operations_pipeline.yaml | kubectl apply -f -
