@@ -93,7 +93,7 @@ data:
             try:
                 g = Github(GITHUB_TOKEN)
                 # REPLACE WITH YOUR ACTUAL GITHUB REPO URL:
-                repo = g.get_repo("saikiran243/eks-drift-demo") 
+                repo = g.get_repo("saikiran243/k8sobserve") 
                 # Open PR Logic goes here...
                 print("📦 Automated PR successfully created!")
             except Exception as e:
