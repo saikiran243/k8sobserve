@@ -2,7 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: target-app
-  namespace: default
+  labels:
+    app: target-app
 spec:
   replicas: 2
   selector:
@@ -14,10 +15,10 @@ spec:
         app: target-app
     spec:
       containers:
-        - name: target-app
-          image: nginx:latest
-          resources:
-            limits:
-              memory: 10Mi 
-            requests:
-              memory: 10Mi# Change this to 1Mi during the interview to trigger the crash
+      - name: target-app
+        image: nginx:latest
+        resources:
+          requests:
+            memory: "10Mi"
+          limits:
+            memory: "10Mi"
