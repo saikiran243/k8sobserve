@@ -18,4 +18,4 @@ spec:
           image: nginx:latest
           resources:
             limits:
-              memory: 256Mi # Change this to 1Mi during the interview to trigger the crash
+              memory: 1Mi # Change this to 1Mi during the interview to trigger the crash
