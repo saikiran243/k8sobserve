@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: target-app
-  namespace: default
 spec:
   replicas: 2
   selector:
@@ -14,10 +13,12 @@ spec:
         app: target-app
     spec:
       containers:
-        - name: target-app
-          image: nginx:latest
-          resources:
-            limits:
-              memory: "5Mi" 
-            requests:
-              memory: "5Mi"
+      - name: target-app
+        image: nginx:latest
+        resources:
+          requests:
+            memory: "2Mi"
+            cpu: "1m"
+          limits:
+            memory: "2Mi"
+            cpu: "1m"
